@@ -6,9 +6,9 @@ module.exports = async (req, res) => {
     
     // Verificar credenciais
     if (!process.env.SHOPIFY_SHOP_NAME || !process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_PASSWORD) {
-      return res.status(500).json({ 
-        error: 'Configuração incompleta', 
-        message: 'Credenciais do Shopify não configuradas' 
+      return res.status(500).json({
+        error: 'Configuração incompleta',
+        message: 'Credenciais do Shopify não configuradas'
       });
     }
     
@@ -75,13 +75,10 @@ module.exports = async (req, res) => {
         for (const variant of product.variants) {
           variantCount++;
           csvData.push({
-            id: product.id,
-            variant_id: variant.id,
             sku: variant.sku || '',
             product_name: product.title,
             variant_name: variant.title !== 'Default Title' ? variant.title : '',
-            inventory_quantity: variant.inventory_quantity || 0,
-            price: variant.price || '0.00'
+            inventory_quantity: variant.inventory_quantity || 0
           });
         }
       }
@@ -89,8 +86,8 @@ module.exports = async (req, res) => {
     
     console.log(`Processamento concluído: ${variantCount} variantes para o CSV`);
     
-    // Criar CSV
-    let csvContent = 'ID,Variant_ID,SKU,Nome_do_Produto,Variação,Quantidade,Preço\n';
+    // Criar CSV com apenas as colunas solicitadas
+    let csvContent = 'SKU,Nome_do_Produto,Variação,Quantidade\n';
     
     csvData.forEach(item => {
       // Garantir que campos de texto estão devidamente escapados
@@ -98,21 +95,21 @@ module.exports = async (req, res) => {
       const safeVariant = item.variant_name ? item.variant_name.replace(/"/g, '""') : '';
       const safeSku = item.sku ? item.sku.replace(/"/g, '""') : '';
       
-      csvContent += `${item.id},${item.variant_id},"${safeSku}","${safeProduct}","${safeVariant}",${item.inventory_quantity},${item.price}\n`;
+      csvContent += `"${safeSku}","${safeProduct}","${safeVariant}",${item.inventory_quantity}\n`;
     });
     
-    console.log('CSV gerado com sucesso, enviando resposta...');
+    console.log('CSV simplificado gerado com sucesso, enviando resposta...');
     
     // Enviar resposta
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=todos-produtos-shopify.csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=produtos-shopify-simplificado.csv');
     res.status(200).send(csvContent);
     
   } catch (error) {
     console.error('Erro na exportação:', error);
-    res.status(500).json({ 
-      error: 'Falha ao exportar produtos', 
-      message: error.message, 
+    res.status(500).json({
+      error: 'Falha ao exportar produtos',
+      message: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }

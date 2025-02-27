@@ -2,8 +2,6 @@ const Shopify = require('shopify-api-node');
 
 module.exports = async (req, res) => {
   try {
-    console.log('Iniciando exportação de produtos');
-    
     // Verificar credenciais
     if (!process.env.SHOPIFY_SHOP_NAME || !process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_PASSWORD) {
       return res.status(500).json({
@@ -20,58 +18,67 @@ module.exports = async (req, res) => {
       apiVersion: '2023-10'
     });
     
-    console.log('Buscando produtos...');
-    // Buscar todos os produtos com paginação usando o método que funcionou anteriormente
+    // Buscar produtos com otimização para execução mais rápida
     let allProducts = [];
-    let params = { limit: 250 }; // máximo permitido pela API do Shopify
+    let params = { limit: 250 };
     let hasNextPage = true;
-    let page = 1;
     
-    while (hasNextPage) {
-      console.log(`Buscando página ${page}...`);
-      const productBatch = await shopify.product.list(params);
-      console.log(`Recebidos ${productBatch.length} produtos`);
-      
-      allProducts = allProducts.concat(productBatch);
-      console.log(`Total acumulado: ${allProducts.length} produtos`);
-      
-      // Verifica se há mais páginas
-      if (productBatch.length < 250) {
-        console.log('Última página alcançada (menos de 250 produtos)');
-        hasNextPage = false;
-      } else {
-        // Configura para próxima página
-        if (productBatch.nextPageParameters) {
-          params = productBatch.nextPageParameters;
-        } else {
-          // Tenta usar o método de paginação por since_id como fallback
-          const lastId = productBatch[productBatch.length - 1].id;
-          params = { limit: 250, since_id: lastId };
+    // Primeira página (250 produtos)
+    const firstBatch = await shopify.product.list(params);
+    allProducts = allProducts.concat(firstBatch);
+    
+    // Segunda página (500 produtos)
+    if (firstBatch.length === 250) {
+      if (firstBatch.nextPageParameters) {
+        const secondBatch = await shopify.product.list(firstBatch.nextPageParameters);
+        allProducts = allProducts.concat(secondBatch);
+        
+        // Terceira página (750 produtos)
+        if (secondBatch.length === 250 && secondBatch.nextPageParameters) {
+          const thirdBatch = await shopify.product.list(secondBatch.nextPageParameters);
+          allProducts = allProducts.concat(thirdBatch);
+          
+          // Quarta página (1000 produtos)
+          if (thirdBatch.length === 250 && thirdBatch.nextPageParameters) {
+            const fourthBatch = await shopify.product.list(thirdBatch.nextPageParameters);
+            allProducts = allProducts.concat(fourthBatch);
+            
+            // Quinta página (1250 produtos)
+            if (fourthBatch.length === 250 && fourthBatch.nextPageParameters) {
+              const fifthBatch = await shopify.product.list(fourthBatch.nextPageParameters);
+              allProducts = allProducts.concat(fifthBatch);
+              
+              // Sexta página (1500 produtos)
+              if (fifthBatch.length === 250 && fifthBatch.nextPageParameters) {
+                const sixthBatch = await shopify.product.list(fifthBatch.nextPageParameters);
+                allProducts = allProducts.concat(sixthBatch);
+                
+                // Sétima página (1750 produtos)
+                if (sixthBatch.length === 250 && sixthBatch.nextPageParameters) {
+                  const seventhBatch = await shopify.product.list(sixthBatch.nextPageParameters);
+                  allProducts = allProducts.concat(seventhBatch);
+                  
+                  // Oitava página (2000 produtos)
+                  if (seventhBatch.length === 250 && seventhBatch.nextPageParameters) {
+                    const eighthBatch = await shopify.product.list(seventhBatch.nextPageParameters);
+                    allProducts = allProducts.concat(eighthBatch);
+                  }
+                }
+              }
+            }
+          }
         }
-        page++;
-      }
-      
-      // Proteção contra loops infinitos
-      if (page > 50) {
-        console.log('Limite de segurança de páginas atingido (50 páginas)');
-        hasNextPage = false;
       }
     }
     
-    console.log(`Busca concluída: ${allProducts.length} produtos obtidos no total`);
-    
-    // Processar produtos para CSV com todos os campos desejados
-    console.log('Processando produtos para CSV...');
+    // Processar produtos para CSV
     let csvData = [];
-    let variantCount = 0;
-    
     for (const product of allProducts) {
       if (product.variants && product.variants.length > 0) {
         for (const variant of product.variants) {
-          variantCount++;
           csvData.push({
             id: product.id,
-            variant_id: variant.id,
+            variant_id: variant.id, 
             sku: variant.sku || '',
             product_name: product.title,
             variant_name: variant.title !== 'Default Title' ? variant.title : '',
@@ -82,13 +89,9 @@ module.exports = async (req, res) => {
       }
     }
     
-    console.log(`Processamento concluído: ${variantCount} variantes para o CSV`);
-    
     // Criar CSV
     let csvContent = 'ID,Variant_ID,SKU,Nome_do_Produto,Variação,Quantidade,Preço\n';
-    
     csvData.forEach(item => {
-      // Garantir que campos de texto estão devidamente escapados
       const safeProduct = item.product_name ? item.product_name.replace(/"/g, '""') : '';
       const safeVariant = item.variant_name ? item.variant_name.replace(/"/g, '""') : '';
       const safeSku = item.sku ? item.sku.replace(/"/g, '""') : '';
@@ -96,19 +99,15 @@ module.exports = async (req, res) => {
       csvContent += `${item.id},${item.variant_id},"${safeSku}","${safeProduct}","${safeVariant}",${item.inventory_quantity},${item.price}\n`;
     });
     
-    console.log('CSV gerado com sucesso, enviando resposta...');
-    
     // Enviar resposta
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=todos-produtos-shopify.csv');
     res.status(200).send(csvContent);
     
   } catch (error) {
-    console.error('Erro na exportação:', error);
     res.status(500).json({
       error: 'Falha ao exportar produtos',
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      message: error.message
     });
   }
 };

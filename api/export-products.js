@@ -2,118 +2,72 @@ const Shopify = require('shopify-api-node');
 
 module.exports = async (req, res) => {
   try {
-    console.log('Iniciando exportação de produtos');
+    // Verificação detalhada das variáveis
+    const vars = {
+      shopName: process.env.SHOPIFY_SHOP_NAME,
+      apiKey: process.env.SHOPIFY_API_KEY,
+      password: process.env.SHOPIFY_PASSWORD
+    };
     
-    // Verificar credenciais
-    if (!process.env.SHOPIFY_SHOP_NAME || !process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_PASSWORD) {
+    // Verificar valores um por um
+    if (!vars.shopName) {
       return res.status(500).json({ 
         error: 'Configuração incompleta', 
-        message: 'Credenciais do Shopify não configuradas' 
+        message: 'SHOPIFY_SHOP_NAME não está configurado',
+        debug: vars
       });
     }
     
-    // Configurar Shopify
+    if (!vars.apiKey) {
+      return res.status(500).json({ 
+        error: 'Configuração incompleta', 
+        message: 'SHOPIFY_API_KEY não está configurado',
+        debug: vars
+      });
+    }
+    
+    if (!vars.password) {
+      return res.status(500).json({ 
+        error: 'Configuração incompleta', 
+        message: 'SHOPIFY_PASSWORD não está configurado',
+        debug: vars
+      });
+    }
+    
+    // Se chegou aqui, todas as variáveis existem
     const shopify = new Shopify({
-      shopName: process.env.SHOPIFY_SHOP_NAME,
-      apiKey: process.env.SHOPIFY_API_KEY,
-      password: process.env.SHOPIFY_PASSWORD,
+      shopName: vars.shopName,
+      apiKey: vars.apiKey,
+      password: vars.password,
       apiVersion: '2023-10'
     });
     
-    // Buscar produtos de forma simplificada
-    console.log('Iniciando busca de produtos...');
-    let allProducts = [];
-    let params = { limit: 250 }; // Máximo permitido pela API
-    
-    // Loop básico de paginação
-    let keepFetching = true;
-    let currentPage = 1;
-    
-    while (keepFetching) {
-      try {
-        console.log(`Buscando página ${currentPage}...`);
-        const products = await shopify.product.list(params);
-        console.log(`Recebidos ${products.length} produtos na página ${currentPage}`);
-        
-        // Adicionar produtos ao array master
-        allProducts = allProducts.concat(products);
-        console.log(`Total acumulado: ${allProducts.length} produtos`);
-        
-        // Verificar se chegamos ao fim
-        if (products.length < 250) {
-          console.log('Última página alcançada (menos de 250 produtos)');
-          keepFetching = false;
-          break;
-        }
-        
-        // Preparar para próxima página
-        currentPage++;
-        params.page = currentPage;
-        
-        // Proteção contra loops infinitos
-        if (currentPage > 20) {
-          console.log('Limite de segurança de páginas atingido');
-          keepFetching = false;
-          break;
-        }
-      } catch (pageError) {
-        console.error(`Erro ao buscar página ${currentPage}:`, pageError.message);
-        keepFetching = false;
-        break;
-      }
-    }
-    
-    console.log(`Busca concluída: ${allProducts.length} produtos obtidos no total`);
-    
-    // Processar produtos para CSV
-    console.log('Processando produtos para CSV...');
-    let csvData = [];
-    let variantCount = 0;
-    
-    for (const product of allProducts) {
-      if (product.variants && product.variants.length > 0) {
-        for (const variant of product.variants) {
-          variantCount++;
-          csvData.push({
-            id: product.id,
-            variant_id: variant.id,
-            sku: variant.sku || '',
-            product_name: product.title,
-            variant_name: variant.title !== 'Default Title' ? variant.title : '',
-            inventory_quantity: variant.inventory_quantity || 0,
-            price: variant.price || '0.00'
-          });
-        }
-      }
-    }
-    
-    console.log(`Processamento concluído: ${variantCount} variantes para o CSV`);
-    
-    // Criar CSV
-    let csvContent = 'ID,Variant_ID,SKU,Nome_do_Produto,Variação,Quantidade,Preço\n';
-    
-    csvData.forEach(item => {
-      // Garantir que campos de texto estão devidamente escapados
-      const safeProduct = item.product_name ? item.product_name.replace(/"/g, '""') : '';
-      const safeVariant = item.variant_name ? item.variant_name.replace(/"/g, '""') : '';
-      const safeSku = item.sku ? item.sku.replace(/"/g, '""') : '';
+    // Tentar um comando simples
+    try {
+      const shopInfo = await shopify.shop.get();
       
-      csvContent += `${item.id},${item.variant_id},"${safeSku}","${safeProduct}","${safeVariant}",${item.inventory_quantity},${item.price}\n`;
-    });
-    
-    console.log('CSV gerado com sucesso, enviando resposta...');
-    
-    // Enviar resposta
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=todos-produtos-shopify.csv');
-    res.status(200).send(csvContent);
+      res.status(200).json({
+        success: true,
+        shop_info: {
+          name: shopInfo.name,
+          email: shopInfo.email,
+          domain: shopInfo.domain
+        },
+        message: "Conexão Shopify bem-sucedida!"
+      });
+    } catch (shopError) {
+      res.status(500).json({
+        error: "Falha na API Shopify",
+        message: shopError.message,
+        stack: shopError.stack
+      });
+    }
     
   } catch (error) {
-    console.error('Erro na exportação:', error);
     res.status(500).json({ 
-      error: 'Falha ao exportar produtos', 
-      message: error.message, 
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: 'Erro geral', 
+      message: error.message,
+      stack: error.stack
     });
   }
 };

@@ -6,15 +6,9 @@ module.exports = async (req, res) => {
     
     // Verificar credenciais
     if (!process.env.SHOPIFY_SHOP_NAME || !process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_PASSWORD) {
-      console.log('Credenciais não encontradas:', {
-        shopName: process.env.SHOPIFY_SHOP_NAME ? 'presente' : 'ausente',
-        apiKey: process.env.SHOPIFY_API_KEY ? 'presente' : 'ausente',
-        password: process.env.SHOPIFY_PASSWORD ? 'presente' : 'ausente'
-      });
-      
-      return res.status(500).json({
-        error: 'Configuração incompleta',
-        message: 'Credenciais do Shopify não configuradas'
+      return res.status(500).json({ 
+        error: 'Configuração incompleta', 
+        message: 'Credenciais do Shopify não configuradas' 
       });
     }
     
@@ -26,74 +20,50 @@ module.exports = async (req, res) => {
       apiVersion: '2023-10'
     });
     
-    console.log('Conexão Shopify estabelecida');
-    
-    // Buscar produtos - método otimizado para performance
+    // Buscar produtos de forma simplificada
+    console.log('Iniciando busca de produtos...');
     let allProducts = [];
-    let params = { limit: 250 }; // máximo permitido pela API
+    let params = { limit: 250 }; // Máximo permitido pela API
     
-    // Primeira página
-    const batch1 = await shopify.product.list(params);
-    console.log(`Batch 1: ${batch1.length} produtos`);
-    allProducts = allProducts.concat(batch1);
+    // Loop básico de paginação
+    let keepFetching = true;
+    let currentPage = 1;
     
-    // Segunda página
-    if (batch1.length === 250 && batch1.nextPageParameters) {
-      const batch2 = await shopify.product.list(batch1.nextPageParameters);
-      console.log(`Batch 2: ${batch2.length} produtos`);
-      allProducts = allProducts.concat(batch2);
-      
-      // Terceira página
-      if (batch2.length === 250 && batch2.nextPageParameters) {
-        const batch3 = await shopify.product.list(batch2.nextPageParameters);
-        console.log(`Batch 3: ${batch3.length} produtos`);
-        allProducts = allProducts.concat(batch3);
+    while (keepFetching) {
+      try {
+        console.log(`Buscando página ${currentPage}...`);
+        const products = await shopify.product.list(params);
+        console.log(`Recebidos ${products.length} produtos na página ${currentPage}`);
         
-        // Quarta página
-        if (batch3.length === 250 && batch3.nextPageParameters) {
-          const batch4 = await shopify.product.list(batch3.nextPageParameters);
-          console.log(`Batch 4: ${batch4.length} produtos`);
-          allProducts = allProducts.concat(batch4);
-          
-          // Quinta página
-          if (batch4.length === 250 && batch4.nextPageParameters) {
-            const batch5 = await shopify.product.list(batch4.nextPageParameters);
-            console.log(`Batch 5: ${batch5.length} produtos`);
-            allProducts = allProducts.concat(batch5);
-            
-            // Sexta página
-            if (batch5.length === 250 && batch5.nextPageParameters) {
-              const batch6 = await shopify.product.list(batch5.nextPageParameters);
-              console.log(`Batch 6: ${batch6.length} produtos`);
-              allProducts = allProducts.concat(batch6);
-              
-              // Sétima página
-              if (batch6.length === 250 && batch6.nextPageParameters) {
-                const batch7 = await shopify.product.list(batch6.nextPageParameters);
-                console.log(`Batch 7: ${batch7.length} produtos`);
-                allProducts = allProducts.concat(batch7);
-                
-                // Oitava página
-                if (batch7.length === 250 && batch7.nextPageParameters) {
-                  const batch8 = await shopify.product.list(batch7.nextPageParameters);
-                  console.log(`Batch 8: ${batch8.length} produtos`);
-                  allProducts = allProducts.concat(batch8);
-                  
-                  // Nona página
-                  if (batch8.length === 250 && batch8.nextPageParameters) {
-                    const batch9 = await shopify.product.list(batch8.nextPageParameters);
-                    console.log(`Batch 9: ${batch9.length} produtos`);
-                    allProducts = allProducts.concat(batch9);
-                  }
-                }
-              }
-            }
-          }
+        // Adicionar produtos ao array master
+        allProducts = allProducts.concat(products);
+        console.log(`Total acumulado: ${allProducts.length} produtos`);
+        
+        // Verificar se chegamos ao fim
+        if (products.length < 250) {
+          console.log('Última página alcançada (menos de 250 produtos)');
+          keepFetching = false;
+          break;
         }
+        
+        // Preparar para próxima página
+        currentPage++;
+        params.page = currentPage;
+        
+        // Proteção contra loops infinitos
+        if (currentPage > 20) {
+          console.log('Limite de segurança de páginas atingido');
+          keepFetching = false;
+          break;
+        }
+      } catch (pageError) {
+        console.error(`Erro ao buscar página ${currentPage}:`, pageError.message);
+        keepFetching = false;
+        break;
       }
     }
     
-    console.log(`Total de produtos obtidos: ${allProducts.length}`);
+    console.log(`Busca concluída: ${allProducts.length} produtos obtidos no total`);
     
     // Processar produtos para CSV
     console.log('Processando produtos para CSV...');
@@ -140,9 +110,9 @@ module.exports = async (req, res) => {
     
   } catch (error) {
     console.error('Erro na exportação:', error);
-    res.status(500).json({
-      error: 'Falha ao exportar produtos',
-      message: error.message,
+    res.status(500).json({ 
+      error: 'Falha ao exportar produtos', 
+      message: error.message, 
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }

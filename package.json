@@ -1,0 +1,8 @@
+{
+  "name": "shopify-b2b-app",
+  "version": "1.0.0",
+  "description": "API para exportação de produtos Shopify em CSV",
+  "dependencies": {
+    "shopify-api-node": "^3.12.0"
+  }
+}
